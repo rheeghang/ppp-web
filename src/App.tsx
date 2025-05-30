@@ -17,49 +17,61 @@ const AppContainer = styled.div`
   min-height: 100vh;
 `;
 
-const Header = styled.div`
-  color: black;
-  z-index: 100;
+const TopBar = styled.div`
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
-  height: 100%;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  padding: 2vh 5vw;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  padding: 3vh 10vw 0 0;
-`;
-
-const HeadText = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-
-`;
-
-const StyledDeadlineInfo = styled.div`
-  cursor: help;
+  align-items: center;
   position: relative;
-  margin-top: 5px;
+`;
 
-  p {
-    margin: 0;
-  }
+const LeftSection = styled.div`
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+`;
 
-  .remaining-time {
-    font-size: 24px;
-  }
+const DateInfo = styled.div`
+  font-size: 1.2rem;
+  font-weight: 600;
+`;
+
+const DeadlineBox = styled.div`
+  background: white;
+  border: 1px solid black;
+  padding: 0.2rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+`;
+
+const CenterTitle = styled.div`
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 101;
+  
+`;
+
+const RightSection = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 `;
 
 const ModeSelector = styled.div`
   font-size: 30px;
   display: flex;
   gap: 1rem;
-  position: fixed;
-  top: 3vh;
-  right: 10vw;
 `;
 
 const ModeButton = styled.span<{ active: boolean }>`
@@ -71,18 +83,31 @@ const ModeButton = styled.span<{ active: boolean }>`
 
 const Content = styled.div`
   display: flex;
+  flex-direction: column;
   flex: 1;
 `;
 
-const Panel = styled.div<{ bgColor: string; isLeft: boolean }>`
-  display: inline-block;
-  width: 50%;
-  height: 100vh;
+const Panel = styled.div<{ mode: Mode; isTop: boolean }>`
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 50vh;
   position: fixed;
-  padding-top: 30vh;
-  top: 0;
-  background-color: ${props => props.bgColor};
-  ${props => props.isLeft ? 'left: 0;' : 'right: 0;'}
+  padding: 15vh 5vw 2vh 5vw;
+  ${props => props.isTop ? 'top: 0;' : 'bottom: 0;'}
+`;
+
+const SubjectPanel = styled(Panel)`
+  background: ${props => props.mode === 'R' 
+    ? 'linear-gradient(to top, #FFFB92 15%, white 70%)' 
+    : 'linear-gradient(to top, #FFC2F5 15%, white 70%)'};
+`;
+
+const RulePanel = styled(Panel)`
+  background: ${props => props.mode === 'R' 
+    ? 'linear-gradient(to bottom, #00F6FF 15%, white 70%)'
+    : 'linear-gradient(to bottom, #C3FFC6 15%, white 70%)'};
+  padding: 1vh 5vw 15vh 5vw;
 `;
 
 const BottomText = styled.div`
@@ -225,43 +250,47 @@ const App: React.FC = () => {
 
   return (
     <AppContainer>
-      <Header>
-        <HeadText>
-          <h1>PPP</h1>
-          <StyledDeadlineInfo>
+      <TopBar>
+        <LeftSection>
+          <DateInfo>
             <p>{deadlineInfo.date}</p>
+          </DateInfo>
+          <DeadlineBox>
             <span className="remaining-time">{remainingTime}</span>
-          </StyledDeadlineInfo>
-        </HeadText>
-        <ModeSelector>
-          <ModeButton
-            active={currentMode === 'R'}
-            onClick={() => setCurrentMode('R')}
-            title="rheeghang"
-          >
-            R
-          </ModeButton>
-          /
-          <ModeButton
-            active={currentMode === 'D'}
-            onClick={() => setCurrentMode('D')}
-            title="dandan"
-          >
-            D
-          </ModeButton>
-        </ModeSelector>
-      </Header>
+          </DeadlineBox>
+        </LeftSection>
+        <CenterTitle>
+          <h1 className="text-[6rem] mt-10 font-bold">PPP</h1>
+        </CenterTitle>
+        <RightSection>
+          <ModeSelector>
+            <ModeButton
+              active={currentMode === 'R'}
+              onClick={() => setCurrentMode('R')}
+              title="rheeghang"
+            >
+              R
+            </ModeButton>
+            /
+            <ModeButton
+              active={currentMode === 'D'}
+              onClick={() => setCurrentMode('D')}
+              title="dandan"
+            >
+              D
+            </ModeButton>
+          </ModeSelector>
+        </RightSection>
+      </TopBar>
       <Content>
-        <Panel bgColor={colors[currentMode].left} isLeft={true}>
-          <h2>Subject</h2>
-          <br />
-          {isLoading ? <Loading /> : <div id="subject-data">{subjectData}</div>}
-        </Panel>
-        <Panel bgColor={colors[currentMode].right} isLeft={false}>
-          <h2>Rule</h2>
-          <br />
-          {isLoading ? <Loading /> : <div id="rule-data">{ruleData}</div>}
-        </Panel>
+        <SubjectPanel mode={currentMode} isTop={true} className="items-center justify-center text-center">
+          <h2 className="text-4xl font-bold">Subject</h2>
+          {isLoading ? <Loading /> : <div id="subject-data" className="text-center w-full text-xl pt-10">{subjectData}</div>}
+        </SubjectPanel>
+        <RulePanel mode={currentMode} isTop={false} className=" items-center justify-center text-center">
+          <h2 className="text-4xl font-bold">Rule</h2>
+          {isLoading ? <Loading /> : <div id="rule-data" className="text-center w-full text-xl pt-10">{ruleData}</div>}
+        </RulePanel>
       </Content>
       <BottomText>
         <Button onClick={loadData}>Pick Random</Button>

@@ -8,6 +8,13 @@ const API_KEY = process.env.REACT_APP_GOOGLE_SHEETS_API_KEY;
 console.log('SHEET_ID:', SHEET_ID);
 console.log('API_KEY:', API_KEY);
 
+// 환경 변수 검증
+if (!SHEET_ID || !API_KEY) {
+  console.error('환경 변수가 설정되지 않았습니다!');
+  console.error('SHEET_ID:', SHEET_ID);
+  console.error('API_KEY:', API_KEY);
+}
+
 export const fetchSheetData = async (range: string): Promise<string[][]> => {
   try {
     const response = await axios.get<SheetData>(
