@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import styled from '@emotion/styled';
-import { Mode, Colors, DeadlineInfo, CellFormat } from './types';
-import { fetchSheetData, getSheetCellFormats, updateCellBackground } from './services/sheetService';
+import { Mode, Colors, DeadlineInfo, SubjectItem, RuleItem } from './types';
+import { fetchSubjects, fetchRules, updateSubjectStatus, updateRuleStatus, testConnection, testTableAccess, resetAllStatusToZero, setCurrentItemsToOne, fetchStatusOneItems } from './services/supabaseService';
 import { Modal } from './components/Modal';
+import { SecurityModal } from './components/SecurityModal';
 import { Loading } from './components/Loading';
 import { Tooltip } from './components/Tooltip';
 
@@ -63,9 +64,29 @@ const CenterTitle = styled.div`
 `;
 
 const RightSection = styled.div`
-  display: flex;
+  display: inline-flex;
+  flex-direction: row;
   align-items: center;
   gap: 1rem;
+`;
+
+const StatusOneDisplay = styled.div`
+  display: flex;
+  flex-direction: row;
+  gap: 0.25rem;
+`;
+
+const StatusOneItem = styled.div`
+  background: white;
+  border: 1px solid black;
+  padding: 0.2rem 0.75rem;
+  border-radius: 15px;
+  font-size: 1rem;
+  font-weight: 500;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const ModeSelector = styled.div`
@@ -143,8 +164,13 @@ const App: React.FC = () => {
   const [currentMode, setCurrentMode] = useState<Mode>('R');
   const [subjectData, setSubjectData] = useState<string>('');
   const [ruleData, setRuleData] = useState<string>('');
+  const [currentSubjectId, setCurrentSubjectId] = useState<number | null>(null);
+  const [currentRuleId, setCurrentRuleId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState<boolean>(false);
+  const [statusOneSubject, setStatusOneSubject] = useState<string>('');
+  const [statusOneRule, setStatusOneRule] = useState<string>('');
   const [deadlineInfo, setDeadlineInfo] = useState<DeadlineInfo>({
     number: '',
     date: '',
@@ -158,10 +184,12 @@ const App: React.FC = () => {
     const baseNumber = 5;
 
     if (now < baseDate) {
+      const adjustedDeadline = new Date(baseDate);
+      adjustedDeadline.setDate(baseDate.getDate() + 1);
       return {
         number: String(baseNumber).padStart(3, '0'),
         date: '03.07 24:00',
-        nextDeadline: baseDate
+        nextDeadline: adjustedDeadline
       };
     }
 
@@ -171,6 +199,7 @@ const App: React.FC = () => {
 
     let nextDeadline = new Date(baseDate);
     nextDeadline.setDate(baseDate.getDate() + weeksPassed * 7);
+    nextDeadline.setDate(nextDeadline.getDate() + 1);
 
     const month = String(nextDeadline.getMonth() + 1).padStart(2, '0');
     const day = String(nextDeadline.getDate()).padStart(2, '0');
@@ -198,45 +227,66 @@ const App: React.FC = () => {
 
   const loadData = async () => {
     setIsLoading(true);
-    const range = currentMode === 'R' ? "A:B" : "C:D";
     
     try {
-      const [data, formatData] = await Promise.all([
-        fetchSheetData(range),
-        getSheetCellFormats(range)
+      // R 모드에서만 작동하도록 제한
+      if (currentMode !== 'R') {
+        setSubjectData("D 모드는 아직 지원되지 않습니다");
+        setRuleData("D 모드는 아직 지원되지 않습니다");
+        setIsLoading(false);
+        return;
+      }
+
+      const [subjects, rules] = await Promise.all([
+        fetchSubjects(),
+        fetchRules()
       ]);
 
-      if (data?.length > 0 && formatData?.sheets?.[0]?.data?.[0]?.rowData) {
-        const availableRows = data.slice(1).filter((_, index) => {
-          const rowFormat = formatData.sheets[0].data[0].rowData[index + 1]?.values;
-          if (!rowFormat) return true;
-          
-          return !rowFormat.some((cell: CellFormat) => {
-            const bgColor = cell?.effectiveFormat?.backgroundColor;
-            return bgColor && (bgColor.red !== 1 || bgColor.green !== 1 || bgColor.blue !== 1);
-          });
-        });
+      if (subjects.length === 0 || rules.length === 0) {
+        setSubjectData("사용 가능한 항목이 없습니다");
+        setRuleData("사용 가능한 항목이 없습니다");
+        setCurrentSubjectId(null);
+        setCurrentRuleId(null);
+      } else {
+        // 랜덤 선택
+        const randomSubject = subjects[Math.floor(Math.random() * subjects.length)];
+        const randomRule = rules[Math.floor(Math.random() * rules.length)];
 
-        if (availableRows.length === 0) {
-          setSubjectData("사용 가능한 항목이 없습니다");
-          setRuleData("사용 가능한 항목이 없습니다");
-        } else {
-          const randomA = Math.floor(Math.random() * availableRows.length);
-          const randomB = Math.floor(Math.random() * availableRows.length);
-
-          setSubjectData(availableRows[randomA][0] || '');
-          setRuleData(availableRows[randomB][1] || '');
-        }
+        setSubjectData(randomSubject.subject || '');
+        setRuleData(randomRule.rule || '');
+        setCurrentSubjectId(randomSubject.id);
+        setCurrentRuleId(randomRule.id);
       }
     } catch (error) {
       console.error("데이터 로드 실패:", error);
+      setSubjectData("데이터 로드에 실패했습니다");
+      setRuleData("데이터 로드에 실패했습니다");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // status=1 항목들을 로드하는 함수
+  const loadStatusOneItems = async () => {
+    try {
+      const { subject, rule } = await fetchStatusOneItems();
+      setStatusOneSubject(subject?.subject || '');
+      setStatusOneRule(rule?.rule || '');
+    } catch (error) {
+      console.error('Status=1 항목 로드 실패:', error);
+    }
+  };
+
   useEffect(() => {
-    loadData();
+    // 연결 테스트 및 테이블 접근 테스트 후 데이터 로드
+    const runTests = async () => {
+      await testConnection();
+      await testTableAccess();
+      loadData();
+      loadStatusOneItems(); // status=1 항목들도 로드
+    };
+    
+    runTests();
   }, [currentMode]);
 
   useEffect(() => {
@@ -247,6 +297,44 @@ const App: React.FC = () => {
 
     return () => clearInterval(timer);
   }, []);
+
+  // 체크 버튼 클릭 시 보안 모달 열기
+  const handleCheckClick = () => {
+    setIsSecurityModalOpen(true);
+  };
+
+  // 보안 확인 후 실행되는 함수
+  const handleSecurityConfirm = async () => {
+    if (!currentSubjectId || !currentRuleId) {
+      console.error('선택된 항목이 없습니다');
+      return;
+    }
+
+    try {
+      
+      // 1. 모든 status=1 항목을 0으로 변경
+      const resetSuccess = await resetAllStatusToZero();
+      if (!resetSuccess) {
+        throw new Error('Status 초기화 실패');
+      }
+
+      // 2. 현재 선택된 항목들을 status=1로 변경
+      const updateSuccess = await setCurrentItemsToOne(currentSubjectId, currentRuleId);
+      if (!updateSuccess) {
+        throw new Error('현재 항목 업데이트 실패');
+      }
+
+      // 3. 새로운 데이터 로드
+      await loadData();
+      
+      // 4. status=1 항목들 업데이트
+      await loadStatusOneItems();
+
+      console.log('✅ 모든 상태 업데이트 완료');
+    } catch (error) {
+      console.error('❌ 상태 업데이트 실패:', error);
+    }
+  };
 
   return (
     <AppContainer>
@@ -263,6 +351,18 @@ const App: React.FC = () => {
           <h1 className="text-[6rem] mt-10 font-bold">PPP</h1>
         </CenterTitle>
         <RightSection>
+          <StatusOneDisplay>
+            {statusOneSubject && (
+              <StatusOneItem title={statusOneSubject}>
+                {statusOneSubject}
+              </StatusOneItem>
+            )}
+            {statusOneRule && (
+              <StatusOneItem title={statusOneRule}>
+                {statusOneRule}
+              </StatusOneItem>
+            )}
+          </StatusOneDisplay>
           <ModeSelector>
             <ModeButton
               active={currentMode === 'R'}
@@ -294,9 +394,14 @@ const App: React.FC = () => {
       </Content>
       <BottomText>
         <Button onClick={loadData}>Pick Random</Button>
-        <CheckButton onClick={() => setIsModalOpen(true)}>✓</CheckButton>
+        <CheckButton onClick={handleCheckClick}>✓</CheckButton>
       </BottomText>
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <SecurityModal 
+        isOpen={isSecurityModalOpen} 
+        onConfirm={handleSecurityConfirm}
+        onCancel={() => setIsSecurityModalOpen(false)}
+      />
     </AppContainer>
   );
 };
